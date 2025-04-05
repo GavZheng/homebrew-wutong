@@ -6,12 +6,12 @@ class Wutong < Formula
   license "MIT"
 bottle do
   root_url "https://github.com/GavZheng/homebrew-wutong/releases/download/v0.2.0"
-  sha256 arm64_sequoia: "72a41c3b4eea464f5b4b807b8b2563b96004c8758f4f00fb3a2a2903dedfcea0"
-  sha256 arm64_sonoma: "42353ac97228af95fe925d297c9458023f3422e7feab7fd2bef0cce1b91e1b57"
-  sha256 arm64_ventura: "403214d5dafbf12cb25ff9c959b1d17578afcc0ae5e8c42996f635363ba6f448"
-  sha256 x86_64_sequoia: "c86837b0a18f1a07dcb16c23bccd81aea25f0925e838252371f62243a56f0ae7"
-  sha256 x86_64_sonoma: "c86837b0a18f1a07dcb16c23bccd81aea25f0925e838252371f62243a56f0ae7"
-  sha256 x86_64_ventura: "5f9a742ab9795639963e565f708a95f4aa6351e02517eb578615d3c2e314ecc9"
+  sha256 arm64_sequoia: "3e9004d728a8b035c5f1554f7c4e9f851a0199a1ea45bcc6ab1a563cdd8fab65"
+  sha256 arm64_sonoma: "3e9004d728a8b035c5f1554f7c4e9f851a0199a1ea45bcc6ab1a563cdd8fab65"
+  sha256 arm64_ventura: "601221e81ddada5ac5fb5008cb3da7ec51dd7b2fe06b8626083728283a29f904"
+  sha256 x86_64_sequoia: "4d9e3071259862aed358d0050fa93f78031f1fc18a6623836cdc06ba622519f9"
+  sha256 x86_64_sonoma: "4d9e3071259862aed358d0050fa93f78031f1fc18a6623836cdc06ba622519f9"
+  sha256 x86_64_ventura: "d2d34d6c2e33bb14017593bc7f8f3656706ae5f133c1b848e43a82f797a15e15"
 end
 
   depends_on "rust" => :build
