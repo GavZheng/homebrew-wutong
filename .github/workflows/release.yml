@@ -1,0 +1,183 @@
+name: Update Formula on Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check-release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      url: ${{ steps.get_version.outputs.url }}
+      source_sha: ${{ steps.get_source_sha.outputs.sha256 }}
+    steps:
+      - name: Get latest release
+        id: get_version
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const response = await github.rest.repos.getLatestRelease({
+              owner: 'gavzheng',
+              repo: 'wutong',
+            });
+            const version = response.data.tag_name.replace(/^v/, '');
+            const url = response.data.tarball_url;
+            core.setOutput('version', version);
+            core.setOutput('url', url);
+      - name: Download source tarball
+        run: curl -sL -o source.tar.gz ${{ steps.get_version.outputs.url }}
+      - name: Calculate SHA256
+        id: get_source_sha
+        run: echo "sha256=$(shasum -a 256 source.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
+
+  build-bottles:
+    needs: check-release
+    strategy:
+      matrix:
+        include:
+          - os: macos-13
+            macos_version: ventura
+            arch: x86_64
+            target: x86_64-apple-darwin
+          - os: macos-13
+            macos_version: ventura
+            arch: arm64
+            target: aarch64-apple-darwin
+          - os: macos-14
+            macos_version: sonoma
+            arch: x86_64
+            target: x86_64-apple-darwin
+          - os: macos-14
+            macos_version: sonoma
+            arch: arm64
+            target: aarch64-apple-darwin
+          - os: macos-latest
+            macos_version: sequoia
+            arch: x86_64
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            macos_version: sequoia
+            arch: arm64
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          repository: GavZheng/wutong
+          ref: v${{ needs.check-release.outputs.version }}
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          components: rustc, cargo
+          targets: ${{ matrix.target }}
+          override: true
+          default: true
+      - name: Verify Rust targets
+        run: |
+          echo "Installed targets:"
+          rustup target list | grep installed
+          rustup show
+      - name: Add specific target
+        run: rustup target add ${{ matrix.target }}
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }}
+      - name: Create bottle
+        run: |
+          VERSION=${{ needs.check-release.outputs.version }}
+          BOTTLE_NAME="wutong-${VERSION}.${{ matrix.arch }}_${{ matrix.macos_version }}.bottle.tar.gz"
+          
+          mkdir -p wutong/${VERSION}/bin
+          cp target/${{ matrix.target }}/release/wutong wutong/${VERSION}/bin/
+          
+          tar czf ${BOTTLE_NAME} wutong
+          echo "BOTTLE_NAME=${BOTTLE_NAME}" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: "bottle-${{ matrix.macos_version }}-${{ matrix.arch }}"
+          path: ${{ env.BOTTLE_NAME }}
+          retention-days: 3
+          
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ env.BOTTLE_NAME }}
+          tag_name: v${{ needs.check-release.outputs.version }}
+          repository: GavZheng/homebrew-wutong
+          generate_release_notes: true
+          overwrite: true
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-formula:
+    needs: [check-release, build-bottles]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout homebrew-tap
+        uses: actions/checkout@v4
+        with:
+          repository: GavZheng/homebrew-wutong
+          path: homebrew-tap
+          token: ${{ secrets.PAT }}
+
+      - name: Download all bottles
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "bottle-*"
+          path: bottles
+          merge-multiple: true
+
+      - name: Generate bottle block
+        run: |
+          set -euo pipefail
+          VERSION=${{ needs.check-release.outputs.version }}
+          echo "bottle do" > bottle.tmp
+          echo "  root_url \"https://github.com/GavZheng/homebrew-wutong/releases/download/v${VERSION}\"" >> bottle.tmp
+          for bottle in bottles/*.bottle.tar.gz; do
+            FILENAME=$(basename "$bottle")
+            [[ $FILENAME =~ wutong-(.*)\.(arm64|x86_64)_(ventura|sonoma|sequoia)\.bottle\.tar\.gz ]]
+            ARCH=${BASH_REMATCH[2]}
+            MACOS_VERSION=${BASH_REMATCH[3]}
+            SHA=$(shasum -a 256 "$bottle" | awk '{print $1}')
+            if [[ $ARCH == "arm64" ]]; then
+              echo "  sha256 arm64_${MACOS_VERSION}: \"$SHA\"" >> bottle.tmp
+            else
+              echo "  sha256 x86_64_${MACOS_VERSION}: \"$SHA\"" >> bottle.tmp
+            fi
+          done
+          echo "end" >> bottle.tmp
+          cat bottle.tmp
+
+      - name: Prepare formula update
+        run: |
+          cp bottle.tmp homebrew-tap/
+          ls -l homebrew-tap/bottle.tmp
+
+      - name: Update Formula
+        run: |
+          cd homebrew-tap
+
+          sed -i.bak '/bottle do/,/end/d' Formula/wutong.rb
+
+          sed -i.bak "/license/r bottle.tmp" Formula/wutong.rb
+
+          rm -f Formula/wutong.rb.bak
+          
+          echo "Updated Formula:"
+          cat Formula/wutong.rb
+
+      - name: Commit changes
+        run: |
+          cd homebrew-tap
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add Formula/wutong.rb
+          git commit -m "Update wutong to ${{ needs.check-release.outputs.version}}"
+          git push origin main
