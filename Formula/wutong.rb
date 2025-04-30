@@ -1,8 +1,8 @@
 class Wutong < Formula
-  desc "Your application description"
+  desc "Wutong - The Swiss Army Knife for Developers.🌳"
   homepage "https://github.com/gavzheng/wutong"
-  url "https://api.github.com/repos/GavZheng/wutong/tarball/v0.2.0"
-  sha256 "295454f2a9cdbe5f63c781808034238b81df3644af72bc9d02480849a075cf90"
+  url "https://api.github.com/repos/GavZheng/wutong/tarball/v0.2.1"
+  sha256 "3abb421fbdb7bf71b1209e61751a7e7dcdc14b083a724d733c5939f39f32a065"
   license "MIT"
 bottle do
   root_url "https://github.com/GavZheng/homebrew-wutong/releases/download/v0.2.1"
